@@ -1,58 +1,58 @@
 # Default values for qurtz.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# YAML 형식 파일입니다.
+# 템플릿에 전달될 변수들을 선언합니다.
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# 레플리카셋 개수를 설정합니다. 자세한 정보: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
-# NFS configuration for Obsidian vault
+# Obsidian vault를 위한 NFS 설정
 nfs:
-  server: ""  # Xpenology NAS IP address
-  path: ""    # Path to Obsidian vault on NAS
+  server: ""  # Xpenology NAS IP 주소
+  path: ""    # NAS의 Obsidian vault 경로
   readOnly: false
 
-# File watcher configuration
+# File watcher 설정
 fileWatcher:
   image:
     repository: alpine/inotify-tools
     tag: latest
     pullPolicy: IfNotPresent
-  # Events to watch for (modify,create,delete,move)
+  # 감시할 이벤트 종류 (modify,create,delete,move)
   events: "modify,create,delete,move"
-  # Polling interval in seconds
+  # 폴링 간격 (초)
   pollInterval: 5
 
-# Quartz static site generator
+# Quartz 정적 사이트 생성기 설정
 quartz:
   image:
     repository: node
     tag: "18-alpine"
     pullPolicy: IfNotPresent
-  # Git repository containing Quartz configuration
+  # Quartz 설정이 포함된 Git 저장소
   gitRepo: ""
-  # Branch to use
+  # 사용할 Git 브랜치
   gitBranch: "main"
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+# 컨테이너 이미지를 설정합니다. 자세한 정보: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: nginx
-  # This sets the pull policy for images.
+  # 이미지 pull 정책을 설정합니다.
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # 이미지 태그를 오버라이드합니다. 기본값은 차트의 appVersion입니다.
   tag: ""
 
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+# Private 저장소에서 이미지를 가져오기 위한 시크릿입니다. 자세한 정보: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
-# This is to override the chart name.
+# 차트 이름을 오버라이드합니다.
 nameOverride: ""
 fullnameOverride: ""
 
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+# Pod에 Kubernetes Annotations을 설정합니다.
+# 자세한 정보: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
 podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+# Pod에 Kubernetes Labels을 설정합니다.
+# 자세한 정보: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels: {}
 
 podSecurityContext: {}
@@ -66,19 +66,19 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+# 서비스를 설정합니다. 자세한 정보: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  # 서비스 타입을 설정합니다. 자세한 정보: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  # 포트를 설정합니다. 자세한 정보: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 80
 
 
 resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # 일반적으로 기본 리소스를 지정하지 않고 사용자의 의식적인 선택으로 남겨두는 것을 권장합니다.
+  # 이는 또한 Minikube와 같이 리소스가 적은 환경에서 차트가 실행될 가능성을 높입니다.
+  # 리소스를 지정하려면 다음 줄의 주석을 해제하고 필요에 따라 조정한 후
+  # 'resources:' 뒤의 중괄호를 제거하세요.
   # limits:
   #   cpu: 100m
   #   memory: 128Mi
@@ -86,7 +86,7 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+# Liveness와 Readiness 프로브를 설정합니다. 자세한 정보: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   httpGet:
     path: /
