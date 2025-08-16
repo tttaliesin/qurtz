@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qurtz.fullname" . }}-watcher
+  labels:
+    {{- include "qurtz.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "qurtz.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: watcher
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "qurtz.labels" . | nindent 8 }}
+        app.kubernetes.io/component: watcher
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+      - name: obsidian-vault
+        nfs:
+          server: {{ .Values.nfs.server | quote }}
+          path: {{ .Values.nfs.path | quote }}
+          readOnly: {{ .Values.nfs.readOnly }}
+      - name: scripts
+        configMap:
+          name: {{ include "qurtz.fullname" . }}-scripts
+          defaultMode: 0755
+      - name: shared-data
+        emptyDir: {}
+      containers:
+      - name: file-watcher
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.fileWatcher.image.repository }}:{{ .Values.fileWatcher.image.tag }}"
+        imagePullPolicy: {{ .Values.fileWatcher.image.pullPolicy }}
+        command: ["/bin/sh"]
+        args: ["/scripts/watcher.sh"]
+        volumeMounts:
+        - name: obsidian-vault
+          mountPath: /vault
+          readOnly: {{ .Values.nfs.readOnly }}
+        - name: scripts
+          mountPath: /scripts
+        - name: shared-data
+          mountPath: /tmp
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      - name: quartz-builder
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.quartz.image.repository }}:{{ .Values.quartz.image.tag }}"
+        imagePullPolicy: {{ .Values.quartz.image.pullPolicy }}
+        command: ["/bin/sh"]
+        args: ["/scripts/builder.sh"]
+        ports:
+        - name: rebuild-api
+          containerPort: 3001
+          protocol: TCP
+        volumeMounts:
+        - name: obsidian-vault
+          mountPath: /vault
+          readOnly: {{ .Values.nfs.readOnly }}
+        - name: scripts
+          mountPath: /scripts
+        - name: shared-data
+          mountPath: /tmp
+        - name: build-output
+          mountPath: /app/public
+        env:
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
