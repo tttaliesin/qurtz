@@ -14,7 +14,7 @@ nfs:
 # File watcher 설정
 fileWatcher:
   image:
-    repository: alpine/inotify-tools
+    repository: alpine
     tag: latest
     pullPolicy: IfNotPresent
   # 감시할 이벤트 종류 (modify,create,delete,move)
@@ -26,7 +26,7 @@ fileWatcher:
 quartz:
   image:
     repository: node
-    tag: "18-alpine"
+    tag: "22-alpine"
     pullPolicy: IfNotPresent
   # Quartz 설정이 포함된 Git 저장소
   gitRepo: ""

@@ -32,16 +32,19 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       volumes:
       - name: obsidian-vault
-        nfs:
-          server: {{ .Values.nfs.server | quote }}
-          path: {{ .Values.nfs.path | quote }}
-          readOnly: {{ .Values.nfs.readOnly }}
+        persistentVolumeClaim:
+          claimName: {{ include "qurtz.fullname" . }}-nfs-pvc
       - name: scripts
         configMap:
           name: {{ include "qurtz.fullname" . }}-scripts
           defaultMode: 0755
       - name: shared-data
         emptyDir: {}
+      - name: build-output
+        emptyDir: {}
+      - name: nginx-config
+        configMap:
+          name: {{ include "qurtz.fullname" . }}-nginx-config
       containers:
       - name: file-watcher
         securityContext:
@@ -86,6 +89,40 @@ spec:
           value: "production"
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
+      - name: web-server
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        volumeMounts:
+        - name: build-output
+          mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 120
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 120
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

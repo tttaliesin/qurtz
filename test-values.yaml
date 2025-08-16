@@ -1,0 +1,41 @@
+# 테스트용 values 파일 - Xpenology NAS 172.30.1.98
+nfs:
+  server: "172.30.1.98"  # Xpenology NAS IP
+  path: "/volume1/ObsidianVault/devTaliesin"  # 실제 Obsidian vault 경로
+  readOnly: false
+  options: "nolock,nfsvers=3"
+
+quartz:
+  gitRepo: "https://github.com/jackyzha0/quartz.git"  # 기본 Quartz 템플릿
+  gitBranch: "v4"
+
+# 테스트용 리소스 제한 (빌드 성능 최적화)
+resources:
+  limits:
+    cpu: 2000m
+    memory: 3Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+
+image:
+  repository: nginx
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+# 테스트용 설정
+replicaCount: 1
+
+# 일반 보안 컨텍스트 (PV/PVC 사용으로 privileged 불필요)
+podSecurityContext: {}
+securityContext: {}
+
+# 노드 셀렉터 (필요시)
+nodeSelector: {}
+tolerations: []
+affinity: {}

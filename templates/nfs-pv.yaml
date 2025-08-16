@@ -1,0 +1,36 @@
+{{- if .Values.nfs.server }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "qurtz.fullname" . }}-nfs-pv
+  labels:
+    {{- include "qurtz.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - nolock
+    - nfsvers=3
+  nfs:
+    server: {{ .Values.nfs.server | quote }}
+    path: {{ .Values.nfs.path | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "qurtz.fullname" . }}-nfs-pvc
+  labels:
+    {{- include "qurtz.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+{{- end }}

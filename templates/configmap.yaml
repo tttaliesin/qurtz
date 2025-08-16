@@ -6,11 +6,14 @@ metadata:
     {{- include "qurtz.labels" . | nindent 4 }}
 data:
   watcher.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
     
+    echo "Installing required tools..."
+    apk add --no-cache curl findutils coreutils
+    
     echo "Starting file watcher for Obsidian vault at /vault"
-    echo "Watching for events: {{ .Values.fileWatcher.events }}"
+    echo "Using polling method every {{ .Values.fileWatcher.pollInterval }} seconds"
     
     # Function to trigger rebuild
     trigger_rebuild() {
@@ -19,19 +22,63 @@ data:
         curl -X POST http://localhost:3001/rebuild || echo "Failed to trigger rebuild"
     }
     
-    # Monitor vault directory for changes
-    inotifywait -m -r -e {{ .Values.fileWatcher.events }} /vault --format '%w%f %e' |
-    while read file event; do
-        echo "Event: $event on $file"
-        # Ignore hidden files and temporary files
-        if [[ "$file" != */.* ]] && [[ "$file" != *~ ]] && [[ "$file" != *.tmp ]]; then
-            trigger_rebuild "$file"
+    # Initialize checksum file
+    CHECKSUM_FILE="/tmp/vault-checksum"
+    
+    # Function to calculate vault checksum
+    calculate_checksum() {
+        find /vault -type f \( -name "*.md" -o -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" -o -name "*.gif" \) \
+            ! -path "/vault/.obsidian/*" \
+            ! -path "/vault/.trash/*" \
+            ! -name "_Index_of_*" \
+            ! -path "/vault/@eaDir/*" \
+            -exec stat -f "%m %N" {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1
+    }
+    
+    # Initial checksum
+    echo "Calculating initial vault checksum..."
+    CURRENT_CHECKSUM=$(calculate_checksum)
+    echo "$CURRENT_CHECKSUM" > "$CHECKSUM_FILE"
+    echo "Initial checksum: $CURRENT_CHECKSUM"
+    
+    # Polling loop with debouncing
+    DEBOUNCE_DELAY=10  # Wait 10 seconds after last change before building
+    LAST_CHANGE_TIME=0
+    
+    while true; do
+        sleep {{ .Values.fileWatcher.pollInterval }}
+        
+        NEW_CHECKSUM=$(calculate_checksum)
+        STORED_CHECKSUM=$(cat "$CHECKSUM_FILE" 2>/dev/null || echo "")
+        CURRENT_TIME=$(date +%s)
+        
+        if [ "$NEW_CHECKSUM" != "$STORED_CHECKSUM" ]; then
+            echo "Vault content changed at $(date)"
+            echo "Old checksum: $STORED_CHECKSUM"
+            echo "New checksum: $NEW_CHECKSUM"
+            echo "$NEW_CHECKSUM" > "$CHECKSUM_FILE"
+            LAST_CHANGE_TIME=$CURRENT_TIME
+            echo "Debouncing... will build in ${DEBOUNCE_DELAY} seconds if no more changes"
+        else
+            # Check if we should trigger build after debounce period
+            if [ $LAST_CHANGE_TIME -gt 0 ] && [ $((CURRENT_TIME - LAST_CHANGE_TIME)) -ge $DEBOUNCE_DELAY ]; then
+                echo "Debounce period ended, triggering build"
+                trigger_rebuild "vault content changed (debounced)"
+                LAST_CHANGE_TIME=0
+            elif [ $LAST_CHANGE_TIME -eq 0 ]; then
+                echo "No changes detected ($(date))"
+            else
+                echo "Debouncing... $((DEBOUNCE_DELAY - (CURRENT_TIME - LAST_CHANGE_TIME))) seconds remaining"
+            fi
         fi
     done
 
   builder.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
+    
+    echo "Installing required packages..."
+    apk add --no-cache git rsync coreutils
     
     echo "Starting Quartz builder service"
     
@@ -63,11 +110,36 @@ data:
         echo "Building Quartz site at $(date)"
         cd /app/quartz
         
-        # Copy vault content to content directory
-        rsync -av --delete /vault/ ./content/
+        # Copy vault content to content directory, excluding unwanted files
+        rsync -av --delete \
+          --exclude='.obsidian/' \
+          --exclude='.trash/' \
+          --exclude='_Index_of_*.md' \
+          --exclude='@eaDir/' \
+          /vault/ ./content/
         
-        # Build the site
-        npx quartz build
+        # Create index.md if it doesn't exist
+        if [ ! -f "./content/index.md" ]; then
+          echo "# Welcome to Taliesin's Second Brain" > ./content/index.md
+          echo "" >> ./content/index.md
+          echo "This is an auto-generated index page." >> ./content/index.md
+        fi
+        
+        # Update Quartz config
+        # 1. Ignore _Index_of_ files
+        sed -i 's/ignorePatterns: \["private", "templates", ".obsidian"\]/ignorePatterns: ["private", "templates", ".obsidian", "_Index_of_*", "@eaDir"]/' quartz.config.ts
+        
+        # 2. Update site title and base URL
+        sed -i 's/pageTitle: "Quartz 4"/pageTitle: "🧠 Taliesin'\''s Second Brain"/' quartz.config.ts
+        sed -i 's/baseUrl: "quartz.jzhao.xyz"/baseUrl: "localhost:8080"/' quartz.config.ts
+        
+        # 4. Skip favicon creation (causes build issues)
+        # echo "📚" > ./quartz/static/icon.png
+        # echo "📚" > ./quartz/static/favicon.ico
+        
+        # Build the site with optimizations
+        export NODE_OPTIONS="--max-old-space-size=2048"
+        npm run quartz build --concurrency=$(nproc)
         
         # Copy output to shared volume
         rsync -av --delete ./public/ /app/public/
@@ -86,7 +158,7 @@ data:
     const server = http.createServer((req, res) => {
         if (req.method === 'POST' && req.url === '/rebuild') {
             console.log('Rebuild triggered via HTTP');
-            exec('/app/scripts/build.sh', (error, stdout, stderr) => {
+            exec('/scripts/build.sh', (error, stdout, stderr) => {
                 if (error) {
                     console.error('Build error:', error);
                     res.writeHead(500);
@@ -121,17 +193,42 @@ data:
     done
 
   build.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
     
     echo "Executing build at $(date)"
     cd /app/quartz
     
-    # Copy vault content to content directory
-    rsync -av --delete /vault/ ./content/
+    # Copy vault content to content directory, excluding unwanted files
+    rsync -av --delete \
+      --exclude='.obsidian/' \
+      --exclude='.trash/' \
+      --exclude='_Index_of_*.md' \
+      --exclude='@eaDir/' \
+      /vault/ ./content/
     
-    # Build the site
-    npx quartz build
+    # Create index.md if it doesn't exist
+    if [ ! -f "./content/index.md" ]; then
+      echo "# Welcome to Taliesin's Second Brain" > ./content/index.md
+      echo "" >> ./content/index.md
+      echo "This is an auto-generated index page." >> ./content/index.md
+    fi
+    
+    # Update Quartz config
+    # 1. Ignore _Index_of_ files
+    sed -i 's/ignorePatterns: \["private", "templates", ".obsidian"\]/ignorePatterns: ["private", "templates", ".obsidian", "_Index_of_*", "@eaDir"]/' quartz.config.ts
+    
+    # 2. Update site title and base URL
+    sed -i 's/pageTitle: "Quartz 4"/pageTitle: "🧠 Taliesin'\''s Second Brain"/' quartz.config.ts
+    sed -i 's/baseUrl: "quartz.jzhao.xyz"/baseUrl: "localhost:8080"/' quartz.config.ts
+    
+    # 4. Skip favicon creation (causes build issues)
+    # echo "📚" > ./quartz/static/icon.png
+    # echo "📚" > ./quartz/static/favicon.ico
+    
+    # Build the site with optimizations
+    export NODE_OPTIONS="--max-old-space-size=2048"
+    npm run quartz build --concurrency=$(nproc)
     
     # Copy output to shared volume
     rsync -av --delete ./public/ /app/public/

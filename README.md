@@ -117,12 +117,3 @@ kubectl logs -f deployment/qurtz-web -n qurtz
 # 사이트 접속하기
 kubectl port-forward service/qurtz-web 8080:80 -n qurtz
 ```
-
-## Security
-
-- 컨테이너는 가능한 한 non-root 보안 컨텍스트로 실행
-- NFS 접근은 필요에 따라 읽기 전용으로 설정 가능
-
-## License
-
-이 차트는 교육 및 개인 사용을 위해 제공됩니다.
