@@ -1,0 +1,69 @@
+name: Branch Protection
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  post-merge-validation:
+    name: Post-Merge Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Final validation
+        run: |
+          echo "🔍 병합 후 검증 실행 중..."
+          
+          # main 브랜치가 여전히 유효한지 확인
+          helm lint .
+          helm template qurtz . --values values.yaml > /dev/null
+          helm template qurtz-test . --values test-values.yaml > /dev/null
+          
+          echo "✅ Main 브랜치 검증 통과"
+
+      - name: Check version bump
+        run: |
+          # 차트 버전 확인
+          CHART_VERSION=$(grep '^version:' Chart.yaml | awk '{print $2}')
+          echo "현재 차트 버전: $CHART_VERSION"
+          
+          # 이전 버전과 비교해서 버전이 증가했는지 확인하는 로직 확장 가능
+          echo "📊 차트 버전 확인 완료"
+
+      - name: Update status
+        run: |
+          echo "🎉 Main 브랜치 정상 상태, 프로덕션 준비 완료!"
+
+  create-release-draft:
+    name: Create Release Draft
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, 'feat:')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get chart version
+        id: version
+        run: |
+          CHART_VERSION=$(grep '^version:' Chart.yaml | awk '{print $2}')
+          echo "version=$CHART_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release draft
+        run: |
+          # 새로운 기능에 대한 릴리스 초안 생성
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --draft \
+            --title "Qurtz Helm Chart v${{ steps.version.outputs.version }}" \
+            --notes "버전 ${{ steps.version.outputs.version }}에 대한 자동 생성된 릴리스 초안" \
+            --target main || echo "릴리스가 이미 존재할 수 있습니다"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

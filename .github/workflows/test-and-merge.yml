@@ -1,0 +1,221 @@
+name: Test and Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  HELM_VERSION: "3.14.0"
+  KUBERNETES_VERSION: "1.28.0"
+
+jobs:
+  helm-lint:
+    name: Helm Chart Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '${{ env.HELM_VERSION }}'
+
+      - name: Helm lint
+        run: |
+          helm lint .
+          echo "✅ Helm 차트 린팅 통과"
+
+      - name: Helm template validation
+        run: |
+          helm template qurtz . --values values.yaml > /tmp/manifests.yaml
+          helm template qurtz-test . --values test-values.yaml > /tmp/test-manifests.yaml
+          echo "✅ Helm 템플릿 생성 성공"
+
+  chart-validation:
+    name: Chart Structure Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Chart structure
+        run: |
+          # 필수 파일 존재 확인
+          test -f Chart.yaml || (echo "❌ Chart.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -f values.yaml || (echo "❌ values.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -d templates || (echo "❌ templates 디렉토리를 찾을 수 없습니다" && exit 1)
+          
+          # 필수 템플릿 확인
+          test -f templates/watcher-deployment.yaml || (echo "❌ watcher-deployment.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -f templates/service.yaml || (echo "❌ service.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -f templates/configmap.yaml || (echo "❌ configmap.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -f templates/nfs-pv.yaml || (echo "❌ nfs-pv.yaml 파일을 찾을 수 없습니다" && exit 1)
+          test -f templates/nginx-configmap.yaml || (echo "❌ nginx-configmap.yaml 파일을 찾을 수 없습니다" && exit 1)
+          
+          echo "✅ 차트 구조 검증 통과"
+
+      - name: Check Chart.yaml version
+        run: |
+          CHART_VERSION=$(grep '^version:' Chart.yaml | awk '{print $2}')
+          echo "차트 버전: $CHART_VERSION"
+          
+          # 버전 형식 검증 (시맨틱 버저닝)
+          if [[ ! $CHART_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "❌ 잘못된 차트 버전 형식: $CHART_VERSION"
+            exit 1
+          fi
+          echo "✅ 차트 버전 형식 유효"
+
+  kubernetes-dry-run:
+    name: Kubernetes Dry Run Test
+    runs-on: ubuntu-latest
+    needs: [helm-lint, chart-validation]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '${{ env.HELM_VERSION }}'
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: '${{ env.KUBERNETES_VERSION }}'
+
+      - name: Create fake kubeconfig for dry run
+        run: |
+          mkdir -p ~/.kube
+          # Dry run 테스트를 위한 가짜 kubeconfig 생성
+          cat > ~/.kube/config << EOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              server: https://fake-server:6443
+            name: fake-cluster
+          contexts:
+          - context:
+              cluster: fake-cluster
+              user: fake-user
+            name: fake-context
+          current-context: fake-context
+          users:
+          - name: fake-user
+          EOF
+
+      - name: Kubernetes dry run test
+        run: |
+          # 매니페스트 생성 및 kubectl로 검증
+          helm template qurtz . --values test-values.yaml > manifests.yaml
+          
+          # Dry run 검증 (YAML 문법 및 기본 Kubernetes 리소스 구조 검증)
+          kubectl apply --dry-run=client -f manifests.yaml || (echo "❌ Kubernetes dry run 실패" && exit 1)
+          
+          echo "✅ Kubernetes dry run 검증 통과"
+
+      - name: Resource validation
+        run: |
+          # 필수 리소스 생성 확인
+          grep -q "kind: Deployment" manifests.yaml || (echo "❌ Deployment 리소스를 찾을 수 없습니다" && exit 1)
+          grep -q "kind: Service" manifests.yaml || (echo "❌ Service 리소스를 찾을 수 없습니다" && exit 1)
+          grep -q "kind: ConfigMap" manifests.yaml || (echo "❌ ConfigMap 리소스를 찾을 수 없습니다" && exit 1)
+          grep -q "kind: PersistentVolume" manifests.yaml || (echo "❌ PersistentVolume 리소스를 찾을 수 없습니다" && exit 1)
+          grep -q "kind: PersistentVolumeClaim" manifests.yaml || (echo "❌ PersistentVolumeClaim 리소스를 찾을 수 없습니다" && exit 1)
+          
+          # 배포에 올바른 컨테이너가 포함되어 있는지 확인
+          grep -q "name: file-watcher" manifests.yaml || (echo "❌ file-watcher 컨테이너를 찾을 수 없습니다" && exit 1)
+          grep -q "name: quartz-builder" manifests.yaml || (echo "❌ quartz-builder 컨테이너를 찾을 수 없습니다" && exit 1)
+          grep -q "name: web-server" manifests.yaml || (echo "❌ web-server 컨테이너를 찾을 수 없습니다" && exit 1)
+          
+          echo "✅ 리소스 검증 통과"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for secrets in code
+        run: |
+          # 잠재적인 비밀정보 확인 (기본 패턴)
+          if grep -r -i "password\|secret\|token\|key" --include="*.yaml" --include="*.yml" .; then
+            echo "⚠️  YAML 파일에서 잠재적인 비밀정보 발견 - 검토 필요"
+            # 빌드 실패시키지 않고 경고만 표시
+          fi
+          echo "✅ 보안 스캔 완료"
+
+      - name: Validate image sources
+        run: |
+          # 컨테이너 이미지 추출 및 검증
+          helm template qurtz . --values test-values.yaml | grep "image:" | while read -r line; do
+            image=$(echo "$line" | awk '{print $2}' | tr -d '"')
+            echo "발견된 이미지: $image"
+            
+            # 알려진 신뢰할 수 있는 레지스트리 확인
+            if [[ "$image" =~ ^(alpine|node|nginx): ]]; then
+              echo "✅ 공식 이미지 사용 중: $image"
+            else
+              echo "⚠️  비공식 이미지 감지: $image"
+            fi
+          done
+
+  auto-merge:
+    name: Auto Merge PR
+    runs-on: ubuntu-latest
+    needs: [helm-lint, chart-validation, kubernetes-dry-run, security-scan]
+    if: github.event_name == 'pull_request' && github.actor == 'tttaliesin'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check PR status
+        id: pr-check
+        run: |
+          # 모든 필수 검사가 통과했는지 확인
+          echo "모든 필수 검사 통과 ✅"
+          echo "ready_to_merge=true" >> $GITHUB_OUTPUT
+
+      - name: Auto approve PR
+        if: steps.pr-check.outputs.ready_to_merge == 'true'
+        run: |
+          gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 자동 승인 - 모든 테스트 통과!"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto merge PR
+        if: steps.pr-check.outputs.ready_to_merge == 'true'
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch --body "🤖 테스트 성공 후 자동 병합"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post merge comment
+        if: steps.pr-check.outputs.ready_to_merge == 'true'
+        run: |
+          echo "🎉 PR 성공적으로 병합! 모든 테스트 통과."
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [helm-lint, chart-validation, kubernetes-dry-run, security-scan]
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Check overall status
+        run: |
+          if [[ "${{ needs.helm-lint.result }}" == "success" && 
+                "${{ needs.chart-validation.result }}" == "success" && 
+                "${{ needs.kubernetes-dry-run.result }}" == "success" && 
+                "${{ needs.security-scan.result }}" == "success" ]]; then
+            echo "🎉 모든 테스트 통과! 병합 준비 완료."
+            exit 0
+          else
+            echo "❌ 일부 테스트 실패. 로그를 확인해주세요."
+            exit 1
+          fi
