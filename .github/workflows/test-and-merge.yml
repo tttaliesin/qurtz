@@ -178,12 +178,10 @@ jobs:
           echo "모든 필수 검사 통과 ✅"
           echo "ready_to_merge=true" >> $GITHUB_OUTPUT
 
-      - name: Auto approve PR
+      - name: Skip auto approve (self-approval not allowed)
         if: steps.pr-check.outputs.ready_to_merge == 'true'
         run: |
-          gh pr review ${{ github.event.pull_request.number }} --approve --body "🤖 자동 승인 - 모든 테스트 통과!"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "🤖 모든 테스트 통과 - 자동 승인 건너뜀 (자신의 PR은 승인 불가)"
 
       - name: Auto merge PR
         if: steps.pr-check.outputs.ready_to_merge == 'true'
