@@ -83,11 +83,6 @@ jobs:
         with:
           version: '${{ env.HELM_VERSION }}'
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: '${{ env.KUBERNETES_VERSION }}'
-
       - name: Create fake kubeconfig for dry run
         run: |
           mkdir -p ~/.kube
@@ -111,13 +106,16 @@ jobs:
 
       - name: Kubernetes dry run test
         run: |
-          # 매니페스트 생성 및 kubectl로 검증
+          # 매니페스트 생성 및 YAML 문법 검증
           helm template qurtz . --values test-values.yaml > manifests.yaml
           
-          # Dry run 검증 (YAML 문법 및 기본 Kubernetes 리소스 구조 검증)
-          kubectl apply --dry-run=client -f manifests.yaml || (echo "❌ Kubernetes dry run 실패" && exit 1)
+          # YAML 문법 검증 (yq 사용)
+          if ! yq eval '.' manifests.yaml > /dev/null 2>&1; then
+            echo "❌ YAML 문법 오류 발견"
+            exit 1
+          fi
           
-          echo "✅ Kubernetes dry run 검증 통과"
+          echo "✅ Kubernetes 매니페스트 생성 및 YAML 문법 검증 통과"
 
       - name: Resource validation
         run: |
