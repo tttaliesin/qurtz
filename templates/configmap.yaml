@@ -137,18 +137,24 @@ data:
         # echo "📚" > ./quartz/static/icon.png
         # echo "📚" > ./quartz/static/favicon.ico
         
-        # 5. Add heading collapse functionality (like Obsidian) - simplified approach
+        # 5. Add heading collapse functionality using Quartz component system
+        
+        # Create custom Quartz component for heading collapse
+        mkdir -p ./quartz/components
+        
+        # Create heading collapse functionality using Quartz's built-in script injection
         mkdir -p ./quartz/static/js ./quartz/static/css
         
-        # Create collapse JavaScript using echo (avoiding complex heredoc in YAML)
-        echo 'document.addEventListener("DOMContentLoaded", function() {' > ./quartz/static/js/heading-collapse.js
+        # Create JavaScript file using echo to avoid YAML parsing issues  
+        echo 'function initHeadingCollapse() {' > ./quartz/static/js/heading-collapse.js
         echo '  const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6");' >> ./quartz/static/js/heading-collapse.js
         echo '  headings.forEach(function(heading) {' >> ./quartz/static/js/heading-collapse.js
         echo '    if (heading.closest(".popover") || heading.closest(".sidebar")) return;' >> ./quartz/static/js/heading-collapse.js
+        echo '    // Skip if already has collapse indicator' >> ./quartz/static/js/heading-collapse.js
+        echo '    if (heading.querySelector(".heading-collapse-indicator")) return;' >> ./quartz/static/js/heading-collapse.js
         echo '    const indicator = document.createElement("span");' >> ./quartz/static/js/heading-collapse.js
         echo '    indicator.className = "heading-collapse-indicator";' >> ./quartz/static/js/heading-collapse.js
         echo '    indicator.innerHTML = "▼";' >> ./quartz/static/js/heading-collapse.js
-        echo '    indicator.style.cssText = "cursor: pointer; user-select: none; margin-right: 8px; color: #666; transition: transform 0.2s ease; font-size: 0.8em; display: inline-block;";' >> ./quartz/static/js/heading-collapse.js
         echo '    heading.insertBefore(indicator, heading.firstChild);' >> ./quartz/static/js/heading-collapse.js
         echo '    indicator.addEventListener("click", function(e) {' >> ./quartz/static/js/heading-collapse.js
         echo '      e.preventDefault(); e.stopPropagation();' >> ./quartz/static/js/heading-collapse.js
@@ -165,8 +171,6 @@ data:
         echo '      }' >> ./quartz/static/js/heading-collapse.js
         echo '    });' >> ./quartz/static/js/heading-collapse.js
         echo '  });' >> ./quartz/static/js/heading-collapse.js
-        
-        # Add helper functions
         echo '  function hideNextElements(heading, level) {' >> ./quartz/static/js/heading-collapse.js
         echo '    let nextElement = heading.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
         echo '    while (nextElement) {' >> ./quartz/static/js/heading-collapse.js
@@ -180,7 +184,6 @@ data:
         echo '      current.setAttribute("data-collapsed-by", heading.id || "heading");' >> ./quartz/static/js/heading-collapse.js
         echo '    }' >> ./quartz/static/js/heading-collapse.js
         echo '  }' >> ./quartz/static/js/heading-collapse.js
-        
         echo '  function showNextElements(heading, level) {' >> ./quartz/static/js/heading-collapse.js
         echo '    let nextElement = heading.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
         echo '    while (nextElement) {' >> ./quartz/static/js/heading-collapse.js
@@ -196,19 +199,34 @@ data:
         echo '      nextElement = nextElement.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
         echo '    }' >> ./quartz/static/js/heading-collapse.js
         echo '  }' >> ./quartz/static/js/heading-collapse.js
-        echo '});' >> ./quartz/static/js/heading-collapse.js
+        echo '}' >> ./quartz/static/js/heading-collapse.js
+        echo '' >> ./quartz/static/js/heading-collapse.js
+        echo '// Initialize on both DOMContentLoaded and Quartz nav events' >> ./quartz/static/js/heading-collapse.js
+        echo 'document.addEventListener("DOMContentLoaded", initHeadingCollapse);' >> ./quartz/static/js/heading-collapse.js
+        echo 'document.addEventListener("nav", initHeadingCollapse);' >> ./quartz/static/js/heading-collapse.js
         
         # Create CSS file using echo
-        echo '.heading-collapse-indicator { opacity: 0.6; font-weight: normal !important; }' > ./quartz/static/css/heading-collapse.css
+        echo '.heading-collapse-indicator { opacity: 0.6; font-weight: normal !important; cursor: pointer; user-select: none; margin-right: 8px; color: #666; transition: transform 0.2s ease; font-size: 0.8em; display: inline-block; }' > ./quartz/static/css/heading-collapse.css
         echo '.heading-collapse-indicator:hover { opacity: 1; color: var(--primary) !important; }' >> ./quartz/static/css/heading-collapse.css
         echo 'h1, h2, h3, h4, h5, h6 { position: relative; cursor: default; }' >> ./quartz/static/css/heading-collapse.css
         echo 'h1:hover .heading-collapse-indicator, h2:hover .heading-collapse-indicator, h3:hover .heading-collapse-indicator, h4:hover .heading-collapse-indicator, h5:hover .heading-collapse-indicator, h6:hover .heading-collapse-indicator { opacity: 1; }' >> ./quartz/static/css/heading-collapse.css
         echo '[data-collapsed-by] { transition: opacity 0.2s ease; }' >> ./quartz/static/css/heading-collapse.css
         echo '.collapsed { opacity: 0.8; }' >> ./quartz/static/css/heading-collapse.css
         
+        # Ensure static files are automatically included in all pages
+        # This is cleaner than manual HTML injection
+        
         # Build the site with optimizations
         export NODE_OPTIONS="--max-old-space-size=2048"
         npm run quartz build --concurrency=$(nproc)
+        
+        # Copy static files to build output and inject into HTML
+        mkdir -p ./public/static/css ./public/static/js
+        cp ./quartz/static/css/heading-collapse.css ./public/static/css/
+        cp ./quartz/static/js/heading-collapse.js ./public/static/js/
+        
+        # Inject into all HTML files - this ensures all pages have the functionality
+        find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
         
         # Copy output to shared volume
         rsync -av --delete ./public/ /app/public/
@@ -295,78 +313,19 @@ data:
     # echo "📚" > ./quartz/static/icon.png
     # echo "📚" > ./quartz/static/favicon.ico
     
-    # 5. Add heading collapse functionality (like Obsidian) - simplified approach
-    mkdir -p ./quartz/static/js ./quartz/static/css
-    
-    # Create collapse JavaScript using echo (avoiding complex heredoc in YAML)
-    echo 'document.addEventListener("DOMContentLoaded", function() {' > ./quartz/static/js/heading-collapse.js
-    echo '  const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6");' >> ./quartz/static/js/heading-collapse.js
-    echo '  headings.forEach(function(heading) {' >> ./quartz/static/js/heading-collapse.js
-    echo '    if (heading.closest(".popover") || heading.closest(".sidebar")) return;' >> ./quartz/static/js/heading-collapse.js
-    echo '    const indicator = document.createElement("span");' >> ./quartz/static/js/heading-collapse.js
-    echo '    indicator.className = "heading-collapse-indicator";' >> ./quartz/static/js/heading-collapse.js
-    echo '    indicator.innerHTML = "▼";' >> ./quartz/static/js/heading-collapse.js
-    echo '    indicator.style.cssText = "cursor: pointer; user-select: none; margin-right: 8px; color: #666; transition: transform 0.2s ease; font-size: 0.8em; display: inline-block;";' >> ./quartz/static/js/heading-collapse.js
-    echo '    heading.insertBefore(indicator, heading.firstChild);' >> ./quartz/static/js/heading-collapse.js
-    echo '    indicator.addEventListener("click", function(e) {' >> ./quartz/static/js/heading-collapse.js
-    echo '      e.preventDefault(); e.stopPropagation();' >> ./quartz/static/js/heading-collapse.js
-    echo '      const isCollapsed = heading.classList.contains("collapsed");' >> ./quartz/static/js/heading-collapse.js
-    echo '      const currentLevel = parseInt(heading.tagName.substring(1));' >> ./quartz/static/js/heading-collapse.js
-    echo '      if (isCollapsed) {' >> ./quartz/static/js/heading-collapse.js
-    echo '        heading.classList.remove("collapsed");' >> ./quartz/static/js/heading-collapse.js
-    echo '        indicator.style.transform = "rotate(0deg)";' >> ./quartz/static/js/heading-collapse.js
-    echo '        showNextElements(heading, currentLevel);' >> ./quartz/static/js/heading-collapse.js
-    echo '      } else {' >> ./quartz/static/js/heading-collapse.js
-    echo '        heading.classList.add("collapsed");' >> ./quartz/static/js/heading-collapse.js
-    echo '        indicator.style.transform = "rotate(-90deg)";' >> ./quartz/static/js/heading-collapse.js
-    echo '        hideNextElements(heading, currentLevel);' >> ./quartz/static/js/heading-collapse.js
-    echo '      }' >> ./quartz/static/js/heading-collapse.js
-    echo '    });' >> ./quartz/static/js/heading-collapse.js
-    echo '  });' >> ./quartz/static/js/heading-collapse.js
-    
-    # Add helper functions
-    echo '  function hideNextElements(heading, level) {' >> ./quartz/static/js/heading-collapse.js
-    echo '    let nextElement = heading.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
-    echo '    while (nextElement) {' >> ./quartz/static/js/heading-collapse.js
-    echo '      if (nextElement.tagName && nextElement.tagName.match(/^H[1-6]$/)) {' >> ./quartz/static/js/heading-collapse.js
-    echo '        const nextLevel = parseInt(nextElement.tagName.substring(1));' >> ./quartz/static/js/heading-collapse.js
-    echo '        if (nextLevel <= level) break;' >> ./quartz/static/js/heading-collapse.js
-    echo '      }' >> ./quartz/static/js/heading-collapse.js
-    echo '      const current = nextElement;' >> ./quartz/static/js/heading-collapse.js
-    echo '      nextElement = nextElement.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
-    echo '      current.style.display = "none";' >> ./quartz/static/js/heading-collapse.js
-    echo '      current.setAttribute("data-collapsed-by", heading.id || "heading");' >> ./quartz/static/js/heading-collapse.js
-    echo '    }' >> ./quartz/static/js/heading-collapse.js
-    echo '  }' >> ./quartz/static/js/heading-collapse.js
-    
-    echo '  function showNextElements(heading, level) {' >> ./quartz/static/js/heading-collapse.js
-    echo '    let nextElement = heading.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
-    echo '    while (nextElement) {' >> ./quartz/static/js/heading-collapse.js
-    echo '      if (nextElement.tagName && nextElement.tagName.match(/^H[1-6]$/)) {' >> ./quartz/static/js/heading-collapse.js
-    echo '        const nextLevel = parseInt(nextElement.tagName.substring(1));' >> ./quartz/static/js/heading-collapse.js
-    echo '        if (nextLevel <= level) break;' >> ./quartz/static/js/heading-collapse.js
-    echo '        nextElement.style.display = "";' >> ./quartz/static/js/heading-collapse.js
-    echo '        nextElement.removeAttribute("data-collapsed-by");' >> ./quartz/static/js/heading-collapse.js
-    echo '      } else if (nextElement.getAttribute("data-collapsed-by") === (heading.id || "heading")) {' >> ./quartz/static/js/heading-collapse.js
-    echo '        nextElement.style.display = "";' >> ./quartz/static/js/heading-collapse.js
-    echo '        nextElement.removeAttribute("data-collapsed-by");' >> ./quartz/static/js/heading-collapse.js
-    echo '      }' >> ./quartz/static/js/heading-collapse.js
-    echo '      nextElement = nextElement.nextElementSibling;' >> ./quartz/static/js/heading-collapse.js
-    echo '    }' >> ./quartz/static/js/heading-collapse.js
-    echo '  }' >> ./quartz/static/js/heading-collapse.js
-    echo '});' >> ./quartz/static/js/heading-collapse.js
-    
-    # Create CSS file using echo
-    echo '.heading-collapse-indicator { opacity: 0.6; font-weight: normal !important; }' > ./quartz/static/css/heading-collapse.css
-    echo '.heading-collapse-indicator:hover { opacity: 1; color: var(--primary) !important; }' >> ./quartz/static/css/heading-collapse.css
-    echo 'h1, h2, h3, h4, h5, h6 { position: relative; cursor: default; }' >> ./quartz/static/css/heading-collapse.css
-    echo 'h1:hover .heading-collapse-indicator, h2:hover .heading-collapse-indicator, h3:hover .heading-collapse-indicator, h4:hover .heading-collapse-indicator, h5:hover .heading-collapse-indicator, h6:hover .heading-collapse-indicator { opacity: 1; }' >> ./quartz/static/css/heading-collapse.css
-    echo '[data-collapsed-by] { transition: opacity 0.2s ease; }' >> ./quartz/static/css/heading-collapse.css
-    echo '.collapsed { opacity: 0.8; }' >> ./quartz/static/css/heading-collapse.css
+    # 5. Add heading collapse functionality (files created during initial setup)
     
     # Build the site with optimizations
     export NODE_OPTIONS="--max-old-space-size=2048"
     npm run quartz build --concurrency=$(nproc)
+    
+    # Copy static files to build output and inject into HTML (same as in builder.sh)
+    mkdir -p ./public/static/css ./public/static/js
+    cp ./quartz/static/css/heading-collapse.css ./public/static/css/ 2>/dev/null || true
+    cp ./quartz/static/js/heading-collapse.js ./public/static/js/ 2>/dev/null || true
+    
+    # Inject into all HTML files
+    find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
     
     # Copy output to shared volume
     rsync -av --delete ./public/ /app/public/
