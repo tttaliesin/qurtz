@@ -44,7 +44,7 @@ jobs:
   create-release-draft:
     name: Create Release Draft
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && contains(github.event.head_commit.message, 'feat:')
+    if: false  # Disabled for manual workflow_dispatch - no head_commit context available
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
