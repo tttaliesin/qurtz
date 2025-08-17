@@ -1,6 +1,6 @@
 apiVersion: v2
-name: .
-description: A Helm chart for Kubernetes
+name: qurtz
+description: Auto-rebuilding Quartz static site generator with NFS Obsidian vault monitoring
 
 # A chart can be either an 'application' or a 'library' chart.
 #
