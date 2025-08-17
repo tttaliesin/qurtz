@@ -213,19 +213,8 @@ data:
         echo '[data-collapsed-by] { transition: opacity 0.2s ease; }' >> ./quartz/static/css/heading-collapse.css
         echo '.collapsed { opacity: 0.8; }' >> ./quartz/static/css/heading-collapse.css
         
-        # Create custom CSS for Mermaid diagram fixes
-        echo '/* Mermaid theme fixes for better text visibility */' > ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .nodeLabel { color: var(--dark) !important; fill: var(--dark) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .node rect { fill: var(--light) !important; stroke: var(--darkgray) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .node .label { color: var(--dark) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .edgeLabel { color: var(--dark) !important; background-color: var(--light) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .cluster rect { fill: var(--lightgray) !important; stroke: var(--gray) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '.mermaid .titleText { fill: var(--dark) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '[saved-theme="dark"] .mermaid .nodeLabel { color: var(--light) !important; fill: var(--light) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '[saved-theme="dark"] .mermaid .node rect { fill: var(--darkgray) !important; stroke: var(--light) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '[saved-theme="dark"] .mermaid .node .label { color: var(--light) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '[saved-theme="dark"] .mermaid .edgeLabel { color: var(--light) !important; background-color: var(--darkgray) !important; }' >> ./quartz/static/css/mermaid-fixes.css
-        echo '[saved-theme="dark"] .mermaid .titleText { fill: var(--light) !important; }' >> ./quartz/static/css/mermaid-fixes.css
+        # Add Mermaid CSS fixes directly to main CSS after build
+        echo "Adding Mermaid CSS fixes to main stylesheet..."
         
         # Ensure static files are automatically included in all pages
         # This is cleaner than manual HTML injection
@@ -237,11 +226,29 @@ data:
         # Copy static files to build output and inject into HTML
         mkdir -p ./public/static/css ./public/static/js
         cp ./quartz/static/css/heading-collapse.css ./public/static/css/
-        cp ./quartz/static/css/mermaid-fixes.css ./public/static/css/
         cp ./quartz/static/js/heading-collapse.js ./public/static/js/
         
+        # Add Mermaid CSS fixes directly to main CSS file
+        cat >> ./public/index.css << 'EOF'
+
+/* Mermaid diagram text visibility fixes */
+.mermaid .nodeLabel { color: var(--dark) !important; fill: var(--dark) !important; }
+.mermaid .node rect { fill: var(--light) !important; stroke: var(--darkgray) !important; }
+.mermaid .node .label { color: var(--dark) !important; }
+.mermaid .edgeLabel { color: var(--dark) !important; background-color: var(--light) !important; }
+.mermaid .cluster rect { fill: var(--lightgray) !important; stroke: var(--gray) !important; }
+.mermaid .titleText { fill: var(--dark) !important; }
+
+/* Dark theme overrides for Mermaid */
+[saved-theme="dark"] .mermaid .nodeLabel { color: var(--light) !important; fill: var(--light) !important; }
+[saved-theme="dark"] .mermaid .node rect { fill: var(--darkgray) !important; stroke: var(--light) !important; }
+[saved-theme="dark"] .mermaid .node .label { color: var(--light) !important; }
+[saved-theme="dark"] .mermaid .edgeLabel { color: var(--light) !important; background-color: var(--darkgray) !important; }
+[saved-theme="dark"] .mermaid .titleText { fill: var(--light) !important; }
+EOF
+        
         # Inject into all HTML files - this ensures all pages have the functionality
-        find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <link rel="stylesheet" href="/static/css/mermaid-fixes.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
+        find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
         
         # Copy output to shared volume
         rsync -av --delete ./public/ /app/public/
@@ -337,11 +344,31 @@ data:
     # Copy static files to build output and inject into HTML (same as in builder.sh)
     mkdir -p ./public/static/css ./public/static/js
     cp ./quartz/static/css/heading-collapse.css ./public/static/css/ 2>/dev/null || true
-    cp ./quartz/static/css/mermaid-fixes.css ./public/static/css/ 2>/dev/null || true
     cp ./quartz/static/js/heading-collapse.js ./public/static/js/ 2>/dev/null || true
     
+    # Add Mermaid CSS fixes directly to main CSS file (same as in builder.sh)
+    if [ -f "./public/index.css" ]; then
+        cat >> ./public/index.css << 'EOF'
+
+/* Mermaid diagram text visibility fixes */
+.mermaid .nodeLabel { color: var(--dark) !important; fill: var(--dark) !important; }
+.mermaid .node rect { fill: var(--light) !important; stroke: var(--darkgray) !important; }
+.mermaid .node .label { color: var(--dark) !important; }
+.mermaid .edgeLabel { color: var(--dark) !important; background-color: var(--light) !important; }
+.mermaid .cluster rect { fill: var(--lightgray) !important; stroke: var(--gray) !important; }
+.mermaid .titleText { fill: var(--dark) !important; }
+
+/* Dark theme overrides for Mermaid */
+[saved-theme="dark"] .mermaid .nodeLabel { color: var(--light) !important; fill: var(--light) !important; }
+[saved-theme="dark"] .mermaid .node rect { fill: var(--darkgray) !important; stroke: var(--light) !important; }
+[saved-theme="dark"] .mermaid .node .label { color: var(--light) !important; }
+[saved-theme="dark"] .mermaid .edgeLabel { color: var(--light) !important; background-color: var(--darkgray) !important; }
+[saved-theme="dark"] .mermaid .titleText { fill: var(--light) !important; }
+EOF
+    fi
+    
     # Inject into all HTML files
-    find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <link rel="stylesheet" href="/static/css/mermaid-fixes.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
+    find ./public -name "*.html" -type f -exec sed -i 's|</head>|  <link rel="stylesheet" href="/static/css/heading-collapse.css">\n  <script src="/static/js/heading-collapse.js"></script>\n</head>|g' {} \;
     
     # Copy output to shared volume
     rsync -av --delete ./public/ /app/public/
